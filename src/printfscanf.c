@@ -1,6 +1,6 @@
 #include <stdio.h>
 
-int main(void)
+int printfscanf(void)
 {
     // 정수
     int age = 12;

@@ -37,7 +37,7 @@ void showQuestion(int level, int a, int b)
     printf("level %d: %d x %d = \n", level, a, b);
 }
 
-int main()
+int function()
 {
     srand(time(NULL));
     for (int i = 1; i < 6; i++)

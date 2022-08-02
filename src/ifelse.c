@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-int main()
+int ifelse()
 {
     srand(time(NULL));             // Initialization, should only be called once.
     int random = rand() % 100 + 1; // Returns a pseudo-random integer between 0 and RAND_MAX.
