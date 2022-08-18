@@ -1,8 +1,12 @@
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
 #define CAPACITY 100
-#define COMMAND 20
+#define COMMAND 50
+
+#define INIT_CAPACITY 3
+#define SEPERATOR " "
 
 /*
     전역번수
@@ -14,71 +18,164 @@
     - 함수의 내부에 선언된 변수들
     - 부모 함수가 호출될 때 메모리가 할당되고 함수 종료 시 소멸
     - Stack이라고 부르는 영역에 위치
+
+
+    c는 문자열의 끝을 \0로 인식하기 때문에 strtok은 원본 문자열을 수정한다.(구분자를 \0로 대체한다.)
+    따라서 char *str로 선언된 문자열(string literal)은 strtok을 사용하면 오류가 발생한다.
  */
 
-char *names[CAPACITY];
-char *numbers[CAPACITY];
+// 배열 재할당을 위해 크기를 정해주지 않고 포인터로 선언
+char **names;
+char **numbers;
 int num_of_people = 0;
+int capacity = INIT_CAPACITY;
 
-void add();
-void find();
+void init_directory();
+void process_command();
+int read_line(char str[], int limit);
+void add(char *name, char *number);
+void reallocate();
+void find(char *name);
 void status();
-void remove_person();
-void load();
-void save();
+void remove_person(char *name);
+void load(char *filename);
+void save(char *filename);
 int search(char *name);
 
 int main(void)
 {
-    char command[COMMAND];
-    while (1)
-    {
-        printf("$ ");
-        scanf("%s", command);
-
-        if (strcmp(command, "add") == 0)
-        {
-            add();
-        }
-        else if (strcmp(command, "find") == 0)
-        {
-            find();
-        }
-        else if (strcmp(command, "status") == 0)
-        {
-            status();
-        }
-        else if (strcmp(command, "remove") == 0)
-        {
-            remove_person();
-        }
-        else if (strcmp(command, "read") == 0)
-        {
-            load();
-        }
-        else if (strcmp(command, "save") == 0)
-        {
-            save();
-        }
-        else if (strcmp(command, "exit") == 0)
-        {
-            break;
-        }
-    }
+    init_directory();
+    process_command();
 
     return 0;
 }
 
-void add()
+void init_directory()
 {
-    char name[COMMAND], number[COMMAND];
-    scanf("%s %s", name, number);
+    // INIT_CAPACITY 칸 만큼 생성
+    names = (char **)malloc(INIT_CAPACITY * sizeof(char *));
+    numbers = (char **)malloc(INIT_CAPACITY * sizeof(char *));
+}
+
+void process_command()
+{
+    char command_line[COMMAND];
+    char *command, *arg1, *arg2;
+
+    while (1)
+    {
+        printf("$ ");
+        if (read_line(command_line, COMMAND) <= 0)
+        {
+            continue;
+        }
+        command = strtok(command_line, SEPERATOR);
+        if (!strcmp(command, "add"))
+        {
+            arg1 = strtok(NULL, SEPERATOR);
+            if (arg1 == NULL)
+            {
+                printf("User name required.\n");
+                continue;
+            }
+            arg2 = strtok(NULL, SEPERATOR);
+            if (arg2 == NULL)
+            {
+                printf("Phone number required.\n");
+                continue;
+            }
+            add(arg1, arg2);
+            printf("%s was added successfully.\n", arg1);
+        }
+        else if (!strcmp(command, "find"))
+        {
+            arg1 = strtok(NULL, SEPERATOR);
+            if (arg1 == NULL)
+            {
+                printf("Invalid arguments.\n");
+                continue;
+            }
+            find(arg1);
+        }
+        else if (!strcmp(command, "status"))
+        {
+            status();
+        }
+        else if (!strcmp(command, "remove"))
+        {
+            arg1 = strtok(NULL, SEPERATOR);
+            if (arg1 == NULL)
+            {
+                printf("Invalid arguments.\n");
+                continue;
+            }
+            remove_person(arg1);
+        }
+        else if (!strcmp(command, "read"))
+        {
+            arg1 = strtok(NULL, SEPERATOR);
+            if (arg1 == NULL)
+            {
+                printf("Filename required.\n");
+                continue;
+            }
+            load(arg1);
+        }
+        else if (!strcmp(command, "save"))
+        {
+            arg1 = strtok(NULL, SEPERATOR);
+            if (arg1 == NULL || strcmp("as", arg1))
+            {
+                printf("Missing 'as' keyword.\n");
+                continue;
+            }
+            arg2 = strtok(NULL, SEPERATOR);
+            if (arg2 == NULL)
+            {
+                printf("Filename required.\n");
+                continue;
+            }
+            save(arg2);
+        }
+        else if (!strcmp(command, "exit"))
+        {
+            break;
+        }
+    }
+}
+
+int read_line(char str[], int limit)
+{
+    int ch, i = 0;
+    // 줄바꿈 문자가 나올 때까지 str에 문자를 저장한다.
+    while ((ch = getchar()) != '\n')
+    {
+        // 최대 길이 + null character를 넘지 않을때만 저장한다.
+        if (i < limit - 1)
+        {
+            str[i++] = ch;
+        }
+    }
+    str[i] = '\0';
+
+    return i;
+}
+
+void add(char *name, char *number)
+{
+    if (num_of_people >= capacity)
+    {
+        reallocate();
+    }
     /*
         strdup를 사용해야 하는 이유
-        name과 number는 add 함수의 지역변수이므로 스택에 할당된 메모리이다. 즉 add 함수가 종료되면 소멸된다.
+        1. name과 number는 지역변수이므로 스택에 할당된 메모리이다. 즉 함수가 종료되면 소멸된다.
         따라서 문자열을 복제한 후 names와 numbers에 복제된 배열의 주소를 저장해야 하는데,
         strdup 함수로 복제된 배열의 메모리는 malloc으로 동적 할당되어 힙에 저장이 되고
         이는 add 함수가 종료된 뒤에도 사라지지 않는다.
+        2. name과 number는 process_command의 arg1, arg2 포인터 변수이다.
+        이 주소들을 names와 numbers에 그대로 저장하면 다른 커맨들르 입력하여 arg1, arg2가 변경될 때
+        영향을 받게 된다.
 
         동적 메모리 할당
         - 아무때나 malloc등의 함수를 호출하여 필요한 크기의 메모리를 할당하는 방법
@@ -88,7 +185,7 @@ void add()
 
     // 사전식 순서로 나보다 큰 항목은 한 칸씩 뒤로 이동시키고 난 뒤 빈 자리에 삽입
     int i = num_of_people - 1;
-    while (i >= 0 && strcmp(name, names[i]) > 0)
+    while (i >= 0 && strcmp(names[i], name) > 0)
     {
         names[i + 1] = names[i];
         numbers[i + 1] = numbers[i];
@@ -98,15 +195,34 @@ void add()
     names[i + 1] = strdup(name);
     numbers[i + 1] = strdup(number);
     num_of_people++;
-
-    printf("%s was added successfully.\n", name);
 }
 
-void find()
+void reallocate()
 {
-    char name[COMMAND];
-    scanf("%s", name);
+    // 크기가 2배인 배열들을 할당
+    capacity *= 2;
+    char **tmp1 = (char **)malloc(capacity * sizeof(char *));
+    char **tmp2 = (char **)malloc(capacity * sizeof(char *));
 
+    // 원본 배열에 있던 값들을 모두 새로운 배열에 복사
+    for (int i = 0; i < num_of_people; i++)
+    {
+        tmp1[i] = names[i];
+        tmp2[i] = numbers[i];
+    }
+
+    // 원본 배열의 내용들은 동적 메모리 할당으로 만들어졌으므로 없어지지 않음
+    // 따라서 free 함수로 반환
+    free(names);
+    free(numbers);
+
+    // names와 numbers가 새로운 배열의 주소를 가리키도록 설정 (배열의 이름은 포인터 변수)
+    names = tmp1;
+    numbers = tmp2;
+}
+
+void find(char *name)
+{
     int index = search(name);
     if (index == -1)
     {
@@ -127,11 +243,8 @@ void status()
     printf("Total %d persons.\n", num_of_people);
 }
 
-void remove_person()
+void remove_person(char *name)
 {
-    char name[COMMAND];
-    scanf("%s", name);
-
     int index = search(name);
     if (index == -1)
     {
@@ -149,10 +262,9 @@ void remove_person()
     printf("'%s' was deleted successfully.\n", name);
 }
 
-void load()
+void load(char *filename)
 {
-    char filename[COMMAND], name[COMMAND], number[COMMAND];
-    scanf("%s", filename);
+    char name[COMMAND], number[COMMAND];
 
     FILE *fp = fopen(filename, "r");
     if (fp == NULL)
@@ -164,20 +276,14 @@ void load()
     while ((fscanf(fp, "%s", name) != EOF))
     {
         fscanf(fp, "%s", number); // 전화번호를 읽어와서 number 배열에 저장한다.
-        names[num_of_people] = strdup(name);
-        numbers[num_of_people] = strdup(number);
-        num_of_people++;
+        add(name, number);
     }
     fclose(fp);
+    printf("File has been loaded successfully.\n");
 }
 
-void save()
+void save(char *filename)
 {
-    char filename[COMMAND], temp[COMMAND];
-
-    scanf("%s", temp); // as
-    scanf("%s", filename);
-
     FILE *fp = fopen(filename, "w");
     if (fp == NULL)
     {
