@@ -2,7 +2,7 @@
 #include <string.h>
 #include <stdlib.h>
 
-#define CAPACITY 100
+#define INIT_CAPACITY 100
 #define COMMAND 50
 #define SEPERATOR " "
 
@@ -24,9 +24,13 @@ typedef struct
     배열은 구조체가 아니라 구조체의 포인터를 담게 되고
     위의 함수들을 호출할 때 모든 멤버들이 아니라 포인터만 복사되므로 효율성이 높아진다.
  */
-Person *directory[CAPACITY];
-int num_of_people = 0;
 
+// 배열의 동적 메모리 할당을 위해 고정된 크기가 아니라 포인터로 선언
+Person **directory;
+int num_of_people;
+int capacity;
+
+void init();
 void process_command();
 int read_line(FILE *fp, char str[], int limit);
 void add(char *name, char *number, char *email, char *group);
@@ -34,17 +38,27 @@ void handle_add(char *name);
 void find(char *name);
 void status();
 void remove_person(char *name);
+void release_person(Person *p);
 void load(char *filename);
 void save(char *filename);
 int search(char *name);
 int compose_name(char str[], int limit);
 void print_person(Person *p);
+void reallocate();
 
 int main(void)
 {
+    init();
     process_command();
 
     return 0;
+}
+
+void init()
+{
+    directory = (Person **)malloc(INIT_CAPACITY * sizeof(Person *));
+    capacity = INIT_CAPACITY;
+    num_of_people = 0;
 }
 
 void process_command()
@@ -149,23 +163,31 @@ int read_line(FILE *fp, char str[], int limit)
 
 void add(char *name, char *number, char *email, char *group)
 {
+    if (num_of_people == capacity)
+    {
+        reallocate();
+    }
+
     int i = num_of_people - 1;
     while (i >= 0 && strcmp(directory[i]->name, name) > 0)
     {
         directory[i + 1] = directory[i];
         i--;
     }
-    directory[i + 1]->name = strdup(name);
-    directory[i + 1]->number = strdup(number);
-    directory[i + 1]->email = strdup(email);
-    directory[i + 1]->group = strdup(group);
+
+    // 구조체가 아니라 구조체의 포인터므로 그곳에 구조체의 크기만큼 동적 메모리 할당한다.
+    directory[i + 1] = (Person *)malloc(sizeof(Person));
+
+    directory[i + 1]->name = name;
+    directory[i + 1]->number = number;
+    directory[i + 1]->email = email;
+    directory[i + 1]->group = group;
     num_of_people++;
 }
 
 void handle_add(char *name)
 {
     char number[COMMAND], email[COMMAND], group[COMMAND];
-    char empty[] = " ";
 
     printf("Phone: ");
     read_line(stdin, number, COMMAND);
@@ -174,9 +196,9 @@ void handle_add(char *name)
     printf("Group: ");
     read_line(stdin, group, COMMAND);
 
-    add(name, (strlen(number) > 0 ? number : empty),
-        (strlen(email) > 0 ? email : empty),
-        (strlen(group) > 0 ? group : empty));
+    add(strdup(name), (strlen(number) > 0 ? strdup(number) : NULL),
+        (strlen(email) > 0 ? strdup(email) : NULL),
+        (strlen(group) > 0 ? strdup(group) : NULL));
 }
 
 void find(char *name)
@@ -209,20 +231,41 @@ void remove_person(char *name)
         printf("No person named '%s' exists.\n", name);
         return;
     }
-
-    // 인덱스의 사람을 다음 인덱스의 사람으로 교체
+    /*
+        Person 구조체도 add 함수에서 malloc으로 동적 할당받았으므로 free 함수로 반환해야 함
+        아래 문장이 없으면 타겟 인덱스 주소가 아니라 다음 인덱스의 사람의 주소가 release_person으로 넘어가게 됨
+     */
+    Person *p = directory[index];
+    // 삭제할 인덱스의 다음 사람부터 끝까지 앞으로 한 칸씩 이동
     for (int i = index; i < num_of_people - 1; i++)
     {
         directory[i] = directory[i + 1];
     }
+    release_person(p);
     num_of_people--;
     printf("'%s' was deleted successfully.\n", name);
+}
+
+void release_person(Person *p)
+{
+    /*
+        그냥 free(p)만 호출하지 않는 이유는
+        구조체 멤버들의 문자열이 strdup 함수 호출로 만들어졌기 때문이다.
+     */
+    free(p->name);
+    if (p->number != NULL)
+        free(p->number);
+    if (p->email != NULL)
+        free(p->email);
+    if (p->group != NULL)
+        free(p->group);
+    free(p);
 }
 
 void load(char *filename)
 {
     char buffer[COMMAND];
-    char *name, *number, *email, *group;
+    char *name, *number, *email, *group, *token;
 
     FILE *fp = fopen(filename, "r");
     if (fp == NULL)
@@ -233,14 +276,24 @@ void load(char *filename)
     while (1)
     {
         if (!read_line(fp, buffer, COMMAND))
-        {
             break;
-        }
         name = strtok(buffer, "#");
-        number = strtok(NULL, "#");
-        email = strtok(NULL, "#");
-        group = strtok(NULL, "#");
-        add(name, number, email, group);
+        token = strtok(NULL, "#"); // number
+        if (!strcmp(token, " "))
+            number = NULL;
+        else
+            number = strdup(token);
+        token = strtok(NULL, "#"); // email
+        if (!strcmp(token, " "))
+            email = NULL;
+        else
+            email = strdup(token);
+        token = strtok(NULL, "#"); // group
+        if (!strcmp(token, " "))
+            group = NULL;
+        else
+            group = strdup(token);
+        add(strdup(name), number, email, group);
     }
     fclose(fp);
     printf("File has been loaded successfully.\n");
@@ -306,8 +359,30 @@ int compose_name(char str[], int limit)
 
 void print_person(Person *p)
 {
+    // 구조체 자체가 아니라 구조체 포인터므로 -> 연산자 사용
     printf("%s:\n", p->name);
     printf("    Phone: %s\n", p->number);
     printf("    Email: %s\n", p->email);
     printf("    Group: %s\n", p->group);
+}
+
+void reallocate()
+{
+    // 크기를 100만큼 추가하고
+    capacity += 100;
+    // temp 구조체 포인터 배열에 해당 크기만큼 동적 메모리 할당한다.
+    Person **temp = (Person **)malloc(capacity * sizeof(Person *));
+    /*
+        그리고 원래 구조체들의 포인터를 temp로 전부 옮긴다.
+        데이터들은 그대로 있으면서 그것들의 주소만 옮긴다. 구조체 포인터 배열이 아니라 그냥 구조체 배열이라면
+        주소가 아니라 모든 데이터가 옮겨졌을 것.
+     */
+    for (int i = 0; i < num_of_people; i++)
+    {
+        temp[i] = directory[i];
+    }
+    // 기존의 데이터들을 반환한다.
+    free(directory);
+    // directory가 temp의 주소를 가리키도록 한다.
+    directory = temp;
 }
