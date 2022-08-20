@@ -13,7 +13,18 @@ typedef struct
     char *email;
     char *group;
 } Person;
-Person directory[CAPACITY];
+/*
+    기존 v4에서는 구조체 배열 한 칸의 구조체가 변수들을 전부 담고 있었다.
+    이렇게 되면 add나 remove 함수 호출 시 구조체 내의 모든 멤버들이 복사된다.
+    또한 print_person 함수 호출 시에도 구조체 자체를 넘겨주므로 (call by value)
+    구조체의 모든 멤버들이 새로 복사된다. (복사되는 데이터의 양이 많다.)
+    이는 구조체 자체를 리턴하는 함수가 있을 때에도 마찬가지이다.
+
+    따라서 구조체 배열이 아니라 구조체 포인터 배열로 선언하면
+    배열은 구조체가 아니라 구조체의 포인터를 담게 되고
+    위의 함수들을 호출할 때 모든 멤버들이 아니라 포인터만 복사되므로 효율성이 높아진다.
+ */
+Person *directory[CAPACITY];
 int num_of_people = 0;
 
 void process_command();
@@ -27,7 +38,7 @@ void load(char *filename);
 void save(char *filename);
 int search(char *name);
 int compose_name(char str[], int limit);
-void print_person(Person p);
+void print_person(Person *p);
 
 int main(void)
 {
@@ -139,15 +150,15 @@ int read_line(FILE *fp, char str[], int limit)
 void add(char *name, char *number, char *email, char *group)
 {
     int i = num_of_people - 1;
-    while (i >= 0 && strcmp(directory[i].name, name) > 0)
+    while (i >= 0 && strcmp(directory[i]->name, name) > 0)
     {
         directory[i + 1] = directory[i];
         i--;
     }
-    directory[i + 1].name = strdup(name);
-    directory[i + 1].number = strdup(number);
-    directory[i + 1].email = strdup(email);
-    directory[i + 1].group = strdup(group);
+    directory[i + 1]->name = strdup(name);
+    directory[i + 1]->number = strdup(number);
+    directory[i + 1]->email = strdup(email);
+    directory[i + 1]->group = strdup(group);
     num_of_people++;
 }
 
@@ -245,10 +256,10 @@ void save(char *filename)
     }
     for (int i = 0; i < num_of_people; i++)
     {
-        fprintf(fp, "%s#", directory[i].name);
-        fprintf(fp, "%s#", directory[i].number);
-        fprintf(fp, "%s#", directory[i].email);
-        fprintf(fp, "%s#\n", directory[i].group);
+        fprintf(fp, "%s#", directory[i]->name);
+        fprintf(fp, "%s#", directory[i]->number);
+        fprintf(fp, "%s#", directory[i]->email);
+        fprintf(fp, "%s#\n", directory[i]->group);
     }
     fclose(fp);
     printf("File has been saved successfully.\n");
@@ -258,7 +269,7 @@ int search(char *name)
 {
     for (int i = 0; i < num_of_people; i++)
     {
-        if (!strcmp(directory[i].name, name))
+        if (!strcmp(directory[i]->name, name))
         {
             return i;
         }
@@ -293,10 +304,10 @@ int compose_name(char str[], int limit)
     return length;
 }
 
-void print_person(Person p)
+void print_person(Person *p)
 {
-    printf("%s:\n", p.name);
-    printf("    Phone: %s\n", p.number);
-    printf("    Email: %s\n", p.email);
-    printf("    Group: %s\n", p.group);
+    printf("%s:\n", p->name);
+    printf("    Phone: %s\n", p->number);
+    printf("    Email: %s\n", p->email);
+    printf("    Group: %s\n", p->group);
 }
